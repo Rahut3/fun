@@ -1,0 +1,8 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { localDeck, sampleNotes, deckSchema, aiDeck } from './study.js';
+test('local practice creates grounded cards and 3 answerable variations per concept', () => { const deck = localDeck(sampleNotes, 6, 3); assert.equal(deck.cards.length, 6); for (const card of deck.cards) assert.ok(sampleNotes.includes(card.evidence)); for (const quiz of deck.quizzes) { assert.equal(quiz.variations.length, 3); for (const v of quiz.variations) { assert.equal(new Set(v.options).size, 4); assert.ok(v.options[v.answer]); assert.ok(v.explanation.includes(quiz.concept)); } } });
+test('two-variation preference is respected', () => { assert.ok(localDeck(sampleNotes, 10, 2).quizzes.every(q => q.variations.length === 2)); });
+test('inadequate notes fail rather than invent content', () => { assert.throws(() => localDeck('No meaningful lecture material here.', 6, 3), /four distinct/); });
+test('schema rejects an invalid answer index', () => { const deck = localDeck(sampleNotes, 6, 2); deck.quizzes[0].variations[0].answer = 4; assert.equal(deckSchema.safeParse(deck).success, false); });
+test('AI validates source evidence instead of accepting hallucinated quotes', async () => { const previous = global.fetch; const deck = localDeck(sampleNotes, 6, 2); deck.quizzes.forEach(q => { q.variations[1].type = 'Application'; }); deck.cards[0].evidence = 'An unsupported quote'; global.fetch = async () => ({ ok: true, json: async () => ({ choices: [{ message: { content: JSON.stringify(deck) } }] }) }); try { await assert.rejects(aiDeck(sampleNotes, 6, 2, 'test-key'), /requirements/); } finally { global.fetch = previous; } });
